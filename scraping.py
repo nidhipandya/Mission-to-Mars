@@ -2,6 +2,7 @@
 from splinter import Browser
 from bs4 import BeautifulSoup as soup
 import pandas as pd
+import datetime as dt
 from webdriver_manager.chrome import ChromeDriverManager
 
 def scrape_all():
@@ -17,7 +18,8 @@ def scrape_all():
         "news_paragraph": news_paragraph,
         "featured_image": featured_image(browser),
         "facts": mars_facts(),
-        "last_modified": dt.datetime.now()
+        "last_modified": dt.datetime.now(),
+        "hemispheres" : hemisphere_img_title(browser)
     }
 
     # Stop webdriver and return data
@@ -25,17 +27,16 @@ def scrape_all():
     return data
 
 def mars_news(browser):
-
-   # Visit the mars nasa news site
-   url = 'https://redplanetscience.com/'
-   browser.visit(url)
+    # Visit the mars nasa news site
+    url = 'https://redplanetscience.com/'
+    browser.visit(url)
 
    # Optional delay for loading the page
-   browser.is_element_present_by_css('div.list_text', wait_time=1)
+    browser.is_element_present_by_css('div.list_text', wait_time=1)
 
    # Convert the browser html to a soup object and then quit the browser
-   html = browser.html
-   news_soup = soup(html, 'html.parser')
+    html = browser.html
+    news_soup = soup(html, 'html.parser')
 
    # Add try/except for error handling
     try:
@@ -48,7 +49,7 @@ def mars_news(browser):
     except AttributeError:
         return None, None
 
-   return news_title, news_p
+    return news_title, news_p
 
 # ## JPL Space Images Featured Image
 
@@ -78,15 +79,64 @@ def featured_image(browser):
 
     return img_url
 
-# ## Mars Facts
+# Fact scraping
+def mars_facts():
 
-df = pd.read_html('https://galaxyfacts-mars.com')[0]
-df.head()
+    #Add try/except for error handling:
+    try:
+        # use 'read_html" to scrape the facts table into a dataframe
+        df = pd.read_html('https://galaxyfacts-mars.com')[0]
 
-df.columns=['Description', 'Mars', 'Earth']
-df.set_index('Description', inplace=True)
-df
+    except BaseException:
+        return None
 
-df.to_html()
+    # Assign columns and set index of dataframe
+    df.columns=['Description', 'Mars', 'Earth']
+    df.set_index('Description', inplace=True)
+    
 
-browser.quit()
+    #Convert dataframe into HTML format, add bootstrap
+    return df.to_html(classes="table table-striped purple")
+
+def hemisphere_img_title(browser): 
+    url = 'https://astrogeology.usgs.gov/search/results?q=hemisphere+enhanced&k1=target&v1=Mars'
+    browser.visit(url)
+
+    # Convert the browser html to a soup object and then quit the browser
+    html = browser.html
+    hemi_soup = soup(html, 'html.parser')
+
+    # Retreive all items that contain mars hemispheres information
+    items = hemi_soup.find_all('div', class_='item')
+
+    # Create empty list for hemisphere urls 
+    hemisphere_image_urls = []
+
+    # Store the main_ul 
+    hemispheres_main_url = 'https://astrogeology.usgs.gov'
+
+    # Loop through the items previously stored
+    for i in items: 
+        # Store title
+        title = i.find('h3').text
+    
+        # Store link that leads to full image website
+        partial_img_url = i.find('a', class_='itemLink product-item')['href']
+    
+        # Visit the link that contains the full image website 
+        browser.visit(hemispheres_main_url + partial_img_url)
+        #print(hemispheres_main_url + partial_img_url)
+    
+        # Retrieve full image source 
+        img_url = browser.find_by_text('Sample')['href']
+        #print(img_url)
+    
+        # Append the retreived information into a list of dictionaries 
+        hemisphere_image_urls.append({"img_url" : img_url, "title" : title})
+    
+    # 4. Print the list that holds the dictionary of each image url and title.
+    return hemisphere_image_urls
+
+if __name__ == "__main__":
+    # If running as script, print scraped data
+    print(scrape_all())
